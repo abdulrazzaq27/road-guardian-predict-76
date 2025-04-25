@@ -1,43 +1,22 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
-
-// Sample data for charts
-const deteriorationData = [
-  { year: '2025', baseline: 95, predicted: 93 },
-  { year: '2026', baseline: 90, predicted: 85 },
-  { year: '2027', baseline: 85, predicted: 75 },
-  { year: '2028', baseline: 80, predicted: 65 },
-  { year: '2029', baseline: 75, predicted: 55 },
-  { year: '2030', baseline: 70, predicted: 45 },
-];
-
-const factorsData = [
-  { name: 'Traffic', value: 35 },
-  { name: 'Weather', value: 25 },
-  { name: 'Age', value: 20 },
-  { name: 'Materials', value: 15 },
-  { name: 'Soil', value: 5 },
-];
-
-const monthlyData = [
-  { month: 'Jan', degradation: 2 },
-  { month: 'Feb', degradation: 3 },
-  { month: 'Mar', degradation: 3.5 },
-  { month: 'Apr', degradation: 2.5 },
-  { month: 'May', degradation: 4 },
-  { month: 'Jun', degradation: 5 },
-  { month: 'Jul', degradation: 3 },
-  { month: 'Aug', degradation: 2 },
-  { month: 'Sep', degradation: 3.5 },
-  { month: 'Oct', degradation: 4.5 },
-  { month: 'Nov', degradation: 5 },
-  { month: 'Dec', degradation: 6 },
-];
+import { getPredictionResults, PredictionResult } from "./PredictionForm";
+import { useEffect, useState } from "react";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 
 const ResultsDashboard = () => {
-  const riskScore = 78; // Sample risk score
+  const [predictionData, setPredictionData] = useState<PredictionResult | null>(null);
+  
+  useEffect(() => {
+    // Get the prediction data when component mounts
+    setPredictionData(getPredictionResults());
+  }, []);
+  
+  const riskScore = predictionData?.riskScore || 78; // Default value if no prediction
+  
   const getRiskColor = (score: number) => {
     if (score >= 75) return 'text-guardian-risk-high';
     if (score >= 50) return 'text-guardian-risk-medium';
@@ -61,6 +40,49 @@ const ResultsDashboard = () => {
     if (score >= 50) return 'bg-guardian-risk-medium';
     return 'bg-guardian-risk-low';
   };
+  
+  // Generate deterioration data for chart
+  const deteriorationData = (() => {
+    const baselineDecay = 5; // 5% decay per year
+    const predictedMultiplier = predictionData?.deteriorationRate 
+      ? predictionData.deteriorationRate / 15 
+      : 1.3; // Default multiplier if no prediction
+      
+    const lifespan = predictionData?.lifespan || 5.3;
+    const yearsToShow = Math.min(Math.ceil(lifespan) + 2, 6);
+    
+    return Array.from({ length: yearsToShow }, (_, i) => {
+      const year = new Date().getFullYear() + i;
+      const baseline = Math.max(0, 100 - (baselineDecay * i));
+      const predicted = Math.max(0, 100 - (baselineDecay * predictedMultiplier * i));
+      return { year: year.toString(), baseline, predicted };
+    });
+  })();
+  
+  // Generate factors data for chart
+  const factorsData = [
+    { name: 'Traffic', value: 35 },
+    { name: 'Weather', value: 25 },
+    { name: 'Age', value: 20 },
+    { name: 'Materials', value: 15 },
+    { name: 'Soil', value: 5 },
+  ];
+  
+  // Generate monthly data for chart
+  const monthlyData = [
+    { month: 'Jan', degradation: 2 },
+    { month: 'Feb', degradation: 3 },
+    { month: 'Mar', degradation: 3.5 },
+    { month: 'Apr', degradation: 2.5 },
+    { month: 'May', degradation: 4 },
+    { month: 'Jun', degradation: 5 },
+    { month: 'Jul', degradation: 3 },
+    { month: 'Aug', degradation: 2 },
+    { month: 'Sep', degradation: 3.5 },
+    { month: 'Oct', degradation: 4.5 },
+    { month: 'Nov', degradation: 5 },
+    { month: 'Dec', degradation: 6 },
+  ];
 
   return (
     <section id="dashboard" className="py-12 bg-white">
@@ -70,7 +92,9 @@ const ResultsDashboard = () => {
             Road Health Dashboard
           </h2>
           <p className="mt-3 max-w-2xl mx-auto text-xl text-gray-500 sm:mt-4">
-            Detailed analysis and visualizations of predicted road deterioration.
+            {predictionData ? 
+              `Analysis for ${predictionData.roadName}` : 
+              'No prediction data yet. Please submit the form above.'}
           </p>
         </div>
         
@@ -106,13 +130,15 @@ const ResultsDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline">
-                <span className="text-4xl font-bold text-guardian-dark">5.3</span>
+                <span className="text-4xl font-bold text-guardian-dark">
+                  {predictionData?.lifespan || 5.3}
+                </span>
                 <span className="ml-2 text-sm text-gray-500">years</span>
               </div>
               <p className="text-sm mt-1 text-gray-500">
                 Without intervention
               </p>
-              <Progress className="h-2 mt-3" value={53} />
+              <Progress className="h-2 mt-3" value={predictionData?.lifespan ? Math.min(100, predictionData.lifespan * 10) : 53} />
             </CardContent>
           </Card>
           
@@ -122,10 +148,16 @@ const ResultsDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline">
-                <span className="text-4xl font-bold text-guardian-primary">Urgent</span>
+                <span className="text-4xl font-bold text-guardian-primary">
+                  {predictionData?.maintenancePriority || 'Urgent'}
+                </span>
               </div>
               <p className="text-sm mt-1 text-gray-500">
-                Schedule within 6 months
+                {predictionData?.maintenancePriority === 'Urgent' ? 
+                  'Schedule within 6 months' : 
+                  predictionData?.maintenancePriority === 'High' ?
+                    'Schedule within 12 months' :
+                    'Monitor regularly'}
               </p>
               <div className="relative">
                 <Progress className="h-2 mt-3 bg-guardian-light" value={80} />
@@ -201,7 +233,9 @@ const ResultsDashboard = () => {
           <h3 className="text-xl font-bold text-guardian-dark mb-4">Recommendation Report</h3>
           <div className="bg-gray-50 p-6 rounded-lg shadow-sm">
             <p className="text-gray-700 mb-4">
-              Based on the analysis, this road segment shows a <span className="font-medium text-guardian-risk-high">high risk</span> of deterioration over the next 2 years, primarily due to heavy vehicle traffic and weather conditions.
+              Based on the analysis, this road segment shows a <span className="font-medium text-guardian-risk-high">high risk</span> of deterioration 
+              {predictionData ? ` over the next ${Math.ceil(predictionData.lifespan)} years` : ' over the next 2 years'}, 
+              primarily due to heavy vehicle traffic and weather conditions.
             </p>
             <div className="space-y-4">
               <div>
@@ -216,7 +250,8 @@ const ResultsDashboard = () => {
               <div>
                 <h4 className="font-medium text-guardian-dark">Cost-Benefit Analysis:</h4>
                 <p className="text-gray-700 mt-1">
-                  Preemptive maintenance now would cost approximately 30-40% less than emergency repairs likely to be required within 12 months.
+                  Preemptive maintenance now would cost approximately 30-40% less than emergency repairs likely to be required within 
+                  {predictionData && predictionData.lifespan < 2 ? ' 6 months' : ' 12 months'}.
                 </p>
               </div>
               <div>

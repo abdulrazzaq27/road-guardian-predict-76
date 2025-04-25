@@ -6,6 +6,24 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { convertFormToDataPoint, predictDeterioration } from '@/utils/roadDataset';
+
+export type PredictionResult = {
+  roadName: string;
+  riskScore: number;
+  deteriorationRate: number;
+  lifespan: number;
+  needsRepair: boolean;
+  maintenancePriority: 'Low' | 'Medium' | 'High' | 'Urgent';
+  similarRoads: any[];
+};
+
+// Global state to store prediction results that can be accessed by ResultsDashboard
+let globalPredictionResults: PredictionResult | null = null;
+
+export const getPredictionResults = (): PredictionResult | null => {
+  return globalPredictionResults;
+};
 
 const PredictionForm = () => {
   const { toast } = useToast();
@@ -42,20 +60,46 @@ const PredictionForm = () => {
     });
   };
 
+  const determinePriority = (riskScore: number, lifespan: number): 'Low' | 'Medium' | 'High' | 'Urgent' => {
+    if (riskScore >= 75) return 'Urgent';
+    if (riskScore >= 60) return 'High';
+    if (riskScore >= 40) return 'Medium';
+    return 'Low';
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate API call for prediction
+    // Convert form data to our dataset format
+    const dataPoint = convertFormToDataPoint(formData);
+    
+    // Use our prediction model
     setTimeout(() => {
+      const prediction = predictDeterioration(dataPoint, 10);
+      
+      // Create the prediction result
+      const result: PredictionResult = {
+        roadName: formData.roadName,
+        riskScore: prediction.riskScore,
+        deteriorationRate: Number(prediction.deteriorationRate.toFixed(2)),
+        lifespan: Number(prediction.lifespan.toFixed(1)),
+        needsRepair: prediction.needsRepair,
+        maintenancePriority: determinePriority(prediction.riskScore, prediction.lifespan),
+        similarRoads: prediction.similarRoads
+      };
+      
+      // Store the result globally
+      globalPredictionResults = result;
+      
       setIsLoading(false);
       toast({
         title: "Prediction Generated",
-        description: "Your road risk prediction has been calculated successfully.",
+        description: `Road risk prediction has been calculated for ${formData.roadName}.`,
       });
       
       // In a real application, we would send the form data to a backend
-      console.log("Form submitted with data:", formData);
+      console.log("Prediction result:", result);
       
       // Scroll to the dashboard section
       const dashboardSection = document.getElementById('dashboard');
