@@ -1,7 +1,7 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { cn } from "@/lib/utils";
 
 // Sample data for charts
 const deteriorationData = [
@@ -56,7 +56,7 @@ const ResultsDashboard = () => {
     return 'Low';
   };
 
-  const getProgressColor = (score: number) => {
+  const getProgressColorClass = (score: number) => {
     if (score >= 75) return 'bg-guardian-risk-high';
     if (score >= 50) return 'bg-guardian-risk-medium';
     return 'bg-guardian-risk-low';
@@ -87,11 +87,16 @@ const ResultsDashboard = () => {
               <p className={`text-sm mt-1 font-medium ${getRiskColor(riskScore)}`}>
                 {getRiskLevel(riskScore)} Risk Level
               </p>
-              <Progress 
-                className="h-2 mt-3" 
-                value={riskScore} 
-                indicator={getProgressColor(riskScore)}
-              />
+              <div className="relative">
+                <Progress 
+                  className="h-2 mt-3" 
+                  value={riskScore} 
+                />
+                <div 
+                  className={`${getProgressColorClass(riskScore)} h-2 absolute top-0 mt-3 left-0 rounded-full`}
+                  style={{ width: `${riskScore}%` }}
+                />
+              </div>
             </CardContent>
           </Card>
           
@@ -122,7 +127,13 @@ const ResultsDashboard = () => {
               <p className="text-sm mt-1 text-gray-500">
                 Schedule within 6 months
               </p>
-              <Progress className="h-2 mt-3 bg-guardian-light" value={80} indicator="bg-guardian-primary" />
+              <div className="relative">
+                <Progress className="h-2 mt-3 bg-guardian-light" value={80} />
+                <div 
+                  className="bg-guardian-primary h-2 absolute top-0 mt-3 left-0 rounded-full" 
+                  style={{ width: '80%' }}
+                />
+              </div>
             </CardContent>
           </Card>
         </div>
