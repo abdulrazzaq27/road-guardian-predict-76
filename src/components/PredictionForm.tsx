@@ -69,42 +69,61 @@ const PredictionForm = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.roadName.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a road name",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsLoading(true);
     
     // Convert form data to our dataset format
     const dataPoint = convertFormToDataPoint(formData);
+    console.log("Input data point:", dataPoint);
     
     // Use our prediction model
     setTimeout(() => {
-      const prediction = predictDeterioration(dataPoint, 10);
-      
-      // Create the prediction result
-      const result: PredictionResult = {
-        roadName: formData.roadName,
-        riskScore: prediction.riskScore,
-        deteriorationRate: Number(prediction.deteriorationRate.toFixed(2)),
-        lifespan: Number(prediction.lifespan.toFixed(1)),
-        needsRepair: prediction.needsRepair,
-        maintenancePriority: determinePriority(prediction.riskScore, prediction.lifespan),
-        similarRoads: prediction.similarRoads
-      };
-      
-      // Store the result globally
-      globalPredictionResults = result;
-      
-      setIsLoading(false);
-      toast({
-        title: "Prediction Generated",
-        description: `Road risk prediction has been calculated for ${formData.roadName}.`,
-      });
-      
-      // In a real application, we would send the form data to a backend
-      console.log("Prediction result:", result);
-      
-      // Scroll to the dashboard section
-      const dashboardSection = document.getElementById('dashboard');
-      if (dashboardSection) {
-        dashboardSection.scrollIntoView({ behavior: 'smooth' });
+      try {
+        const prediction = predictDeterioration(dataPoint, 10);
+        console.log("Prediction results:", prediction);
+        
+        // Create the prediction result
+        const result: PredictionResult = {
+          roadName: formData.roadName,
+          riskScore: prediction.riskScore,
+          deteriorationRate: Number(prediction.deteriorationRate.toFixed(2)),
+          lifespan: Number(prediction.lifespan.toFixed(1)),
+          needsRepair: prediction.needsRepair,
+          maintenancePriority: determinePriority(prediction.riskScore, prediction.lifespan),
+          similarRoads: prediction.similarRoads.slice(0, 5) // Limit to avoid overwhelming UI
+        };
+        
+        // Store the result globally
+        globalPredictionResults = result;
+        
+        setIsLoading(false);
+        toast({
+          title: "Prediction Generated",
+          description: `Road risk prediction has been calculated for ${formData.roadName}.`,
+        });
+        
+        // Scroll to the dashboard section
+        const dashboardSection = document.getElementById('dashboard');
+        if (dashboardSection) {
+          dashboardSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      } catch (error) {
+        console.error("Prediction error:", error);
+        setIsLoading(false);
+        toast({
+          title: "Prediction Error",
+          description: "An error occurred while calculating the prediction.",
+          variant: "destructive",
+        });
       }
     }, 1500);
   };

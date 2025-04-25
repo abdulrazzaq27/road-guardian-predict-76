@@ -43,24 +43,28 @@ export const convertFormToDataPoint = (formData: {
   };
   
   // Scale traffic volume from 0-100 to 0-4
-  const trafficVolume = Math.floor(formData.trafficVolume / 25);
+  const trafficVolume = Math.min(Math.floor(formData.trafficVolume / 20), 4);
   
   // Map weather condition based on rainfall and temperature
-  const weatherCondition = Math.floor((formData.annualRainfall + formData.temperatureFluctuation) / 70);
+  const weatherCondition = Math.min(Math.floor((formData.annualRainfall + formData.temperatureFluctuation) / 70), 2);
   
   // Map material quality based on heavy vehicles (inverse relation)
-  const materialQuality = Math.floor((100 - formData.heavyVehiclesPercentage) / 40);
+  const materialQuality = Math.min(Math.floor((100 - formData.heavyVehiclesPercentage) / 33), 2);
+  
+  // Calculate last repair year (more dynamic than before)
+  const yearsSinceRepair = Math.max(2, Math.floor(formData.roadAge * 0.3));
+  const lastRepairYear = currentYear - yearsSinceRepair;
   
   return {
     constructionYear,
-    lastRepairYear: constructionYear + Math.floor(formData.roadAge / 3), // Estimated
+    lastRepairYear,
     soilType: soilTypeMap[formData.soilType] ?? 1,
     trafficVolume,
-    weatherCondition: Math.min(weatherCondition, 2),
-    materialQuality: Math.min(materialQuality, 2),
+    weatherCondition,
+    materialQuality,
     deteriorationRate: 0, // Will be predicted
     age: formData.roadAge,
-    timeSinceRepair: formData.roadAge - Math.floor(formData.roadAge / 3),
+    timeSinceRepair: yearsSinceRepair,
     needsRepair: 0 // Will be predicted
   };
 };
@@ -82,8 +86,12 @@ export const calculateSimilarity = (a: RoadDataPoint, b: RoadDataPoint): number 
   const trafficVolumeDiff = Math.abs(a.trafficVolume - b.trafficVolume) / 4;
   const weatherConditionDiff = Math.abs(a.weatherCondition - b.weatherCondition) / 2;
   const materialQualityDiff = Math.abs(a.materialQuality - b.materialQuality) / 2;
-  const ageDiff = Math.abs(a.age - b.age) / 45; // Normalize by max possible age
-  const timeSinceRepairDiff = Math.abs(a.timeSinceRepair - b.timeSinceRepair) / 40;
+  
+  // Modified to handle extreme values better
+  const maxAge = 45;
+  const maxTimeSinceRepair = 40;
+  const ageDiff = Math.min(Math.abs(a.age - b.age) / maxAge, 1);
+  const timeSinceRepairDiff = Math.min(Math.abs(a.timeSinceRepair - b.timeSinceRepair) / maxTimeSinceRepair, 1);
   
   // Calculate weighted similarity (1 = identical, 0 = completely different)
   const similarity = 1 - (
@@ -95,7 +103,7 @@ export const calculateSimilarity = (a: RoadDataPoint, b: RoadDataPoint): number 
     weights.timeSinceRepair * timeSinceRepairDiff
   );
   
-  return similarity;
+  return Math.max(0, Math.min(1, similarity)); // Ensure value is between 0 and 1
 };
 
 // Predict road deterioration based on k-nearest neighbors
@@ -118,35 +126,58 @@ export const predictDeterioration = (inputData: RoadDataPoint, k: number = 5): {
     .slice(0, k)
     .map(item => item.dataPoint);
   
-  // Calculate weighted average deterioration rate
+  // Calculate weighted average deterioration rate with safeguards for edge cases
   const totalSimilarity = similarityScores
     .slice(0, k)
     .reduce((sum, item) => sum + item.similarity, 0);
     
-  const deteriorationRate = similarityScores
-    .slice(0, k)
-    .reduce((sum, item) => sum + (item.similarity * item.dataPoint.deteriorationRate), 0) 
-    / totalSimilarity;
+  const deteriorationRate = totalSimilarity > 0 ? 
+    similarityScores
+      .slice(0, k)
+      .reduce((sum, item) => sum + (item.similarity * item.dataPoint.deteriorationRate), 0) / totalSimilarity
+    : 15; // Default value if no similarities found
   
-  // Determine if road needs repair
-  const needsRepairProbability = nearestNeighbors.filter(dp => dp.needsRepair === 1).length / k;
+  // Determine if road needs repair with weighted probability
+  const weightedRepairSum = similarityScores
+    .slice(0, k)
+    .reduce((sum, item) => sum + (item.similarity * item.dataPoint.needsRepair), 0);
+    
+  const needsRepairProbability = totalSimilarity > 0 ? 
+    weightedRepairSum / totalSimilarity : 0.5;
+  
   const needsRepair = needsRepairProbability > 0.5;
   
-  // Calculate risk score (0-100)
-  const riskScore = Math.min(Math.round(
-    (deteriorationRate * 2) + 
-    (needsRepairProbability * 30) + 
-    (inputData.age / 45 * 30) + 
-    (inputData.timeSinceRepair / 40 * 20)
-  ), 100);
+  // Calculate risk score (0-100) based on multiple factors
+  const ageRiskFactor = Math.min(inputData.age / 40, 1) * 30;
+  const repairRiskFactor = Math.min(inputData.timeSinceRepair / 35, 1) * 25;
+  const deteriorationRiskFactor = Math.min(deteriorationRate / 25, 1) * 35;
+  const needsRepairFactor = needsRepair ? 10 : 0;
   
-  // Estimate remaining lifespan in years
-  const lifespan = needsRepair ? 
-    Math.max(0.5, 5 - (deteriorationRate / 10)) : 
-    Math.max(1, 10 - (deteriorationRate / 5));
+  const riskScore = Math.min(
+    Math.round(
+      deteriorationRiskFactor + 
+      needsRepairFactor + 
+      ageRiskFactor + 
+      repairRiskFactor
+    ), 100);
+  
+  // Calculate more accurate lifespan estimate
+  let lifespan = 0;
+  if (needsRepair) {
+    // Roads that need repair have shorter lifespan
+    lifespan = Math.max(0.5, 5 - (deteriorationRate / 15));
+  } else {
+    // Roads in better condition
+    const trafficImpact = inputData.trafficVolume * 0.5;
+    const weatherImpact = inputData.weatherCondition * 0.7;
+    const qualityBonus = (2 - inputData.materialQuality) * 0.8;
+    const ageImpact = Math.min(inputData.age / 20, 1) * 2;
+    
+    lifespan = Math.max(1, 12 - trafficImpact - weatherImpact - ageImpact + qualityBonus);
+  }
   
   return {
-    deteriorationRate,
+    deteriorationRate: Math.max(0, deteriorationRate),
     needsRepair,
     riskScore,
     lifespan,

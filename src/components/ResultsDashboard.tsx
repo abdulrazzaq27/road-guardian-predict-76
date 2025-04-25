@@ -1,11 +1,9 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 import { getPredictionResults, PredictionResult } from "./PredictionForm";
 import { useEffect, useState } from "react";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "./ui/chart";
 
 const ResultsDashboard = () => {
   const [predictionData, setPredictionData] = useState<PredictionResult | null>(null);
@@ -13,9 +11,19 @@ const ResultsDashboard = () => {
   useEffect(() => {
     // Get the prediction data when component mounts
     setPredictionData(getPredictionResults());
-  }, []);
+    
+    // Setup a listener to check for updates to prediction data
+    const checkForUpdates = setInterval(() => {
+      const latestData = getPredictionResults();
+      if (latestData && (!predictionData || latestData.roadName !== predictionData.roadName)) {
+        setPredictionData(latestData);
+      }
+    }, 1000);
+    
+    return () => clearInterval(checkForUpdates);
+  }, [predictionData]);
   
-  const riskScore = predictionData?.riskScore || 78; // Default value if no prediction
+  const riskScore = predictionData?.riskScore || 50; // Default value if no prediction
   
   const getRiskColor = (score: number) => {
     if (score >= 75) return 'text-guardian-risk-high';
@@ -48,8 +56,8 @@ const ResultsDashboard = () => {
       ? predictionData.deteriorationRate / 15 
       : 1.3; // Default multiplier if no prediction
       
-    const lifespan = predictionData?.lifespan || 5.3;
-    const yearsToShow = Math.min(Math.ceil(lifespan) + 2, 6);
+    const lifespan = predictionData?.lifespan || 5;
+    const yearsToShow = Math.min(Math.ceil(lifespan) + 3, 8);
     
     return Array.from({ length: yearsToShow }, (_, i) => {
       const year = new Date().getFullYear() + i;
@@ -59,30 +67,29 @@ const ResultsDashboard = () => {
     });
   })();
   
-  // Generate factors data for chart
+  // Generate factors data for chart - now dynamically based on prediction
   const factorsData = [
-    { name: 'Traffic', value: 35 },
-    { name: 'Weather', value: 25 },
-    { name: 'Age', value: 20 },
-    { name: 'Materials', value: 15 },
-    { name: 'Soil', value: 5 },
+    { name: 'Traffic', value: predictionData ? Math.min(15 + predictionData.similarRoads[0]?.trafficVolume * 5, 45) : 35 },
+    { name: 'Weather', value: predictionData ? Math.min(15 + predictionData.similarRoads[0]?.weatherCondition * 8, 40) : 25 },
+    { name: 'Age', value: predictionData ? Math.min(10 + (predictionData.lifespan < 3 ? 25 : 15), 35) : 20 },
+    { name: 'Materials', value: predictionData ? Math.min(5 + (predictionData.needsRepair ? 15 : 5), 25) : 15 },
+    { name: 'Soil', value: predictionData ? Math.min(5 + predictionData.similarRoads[0]?.soilType * 3, 15) : 5 },
   ];
   
-  // Generate monthly data for chart
-  const monthlyData = [
-    { month: 'Jan', degradation: 2 },
-    { month: 'Feb', degradation: 3 },
-    { month: 'Mar', degradation: 3.5 },
-    { month: 'Apr', degradation: 2.5 },
-    { month: 'May', degradation: 4 },
-    { month: 'Jun', degradation: 5 },
-    { month: 'Jul', degradation: 3 },
-    { month: 'Aug', degradation: 2 },
-    { month: 'Sep', degradation: 3.5 },
-    { month: 'Oct', degradation: 4.5 },
-    { month: 'Nov', degradation: 5 },
-    { month: 'Dec', degradation: 6 },
-  ];
+  // Generate monthly data for chart - make it more dynamic
+  const monthlyData = (() => {
+    // Base pattern
+    const basePattern = [2, 3, 3.5, 2.5, 4, 5, 3, 2, 3.5, 4.5, 5, 6];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Calculate multiplier for customized data
+    const multiplier = predictionData ? (predictionData.deteriorationRate / 15) : 1;
+    
+    return basePattern.map((base, i) => ({
+      month: months[i],
+      degradation: Number((base * multiplier).toFixed(1))
+    }));
+  })();
 
   return (
     <section id="dashboard" className="py-12 bg-white">
@@ -131,7 +138,7 @@ const ResultsDashboard = () => {
             <CardContent>
               <div className="flex items-baseline">
                 <span className="text-4xl font-bold text-guardian-dark">
-                  {predictionData?.lifespan || 5.3}
+                  {predictionData?.lifespan || 5}
                 </span>
                 <span className="ml-2 text-sm text-gray-500">years</span>
               </div>
